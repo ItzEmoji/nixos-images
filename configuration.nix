@@ -10,6 +10,7 @@
     curl
     wget
     neovim
+    fastfetch
   ];
 
   # Enable SSH for remote access during installation
