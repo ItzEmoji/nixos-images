@@ -11,6 +11,7 @@
     wget
     neovim
     fastfetch
+    cfdisk
   ];
 
   # Enable SSH for remote access during installation
