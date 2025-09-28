@@ -8,7 +8,7 @@
 # NixOS Custom Installer
 
 This is a Custom NixOS installer, which I can use to install NixOS faster.
-In it I've defined my Public Key, My Applicatoins, etc.
+In it I've defined my public key, my applications, etc.
 
 If anyone want to copy it feel free to Fork it.
 
