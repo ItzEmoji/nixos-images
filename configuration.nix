@@ -12,7 +12,6 @@
     neovim
     fastfetch
   ];
-
   # Enable SSH for remote access during installation
   services.openssh.enable = true;
   services.openssh.settings.PermitRootLogin = "yes";
