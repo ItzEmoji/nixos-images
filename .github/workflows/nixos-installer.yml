@@ -1,12 +1,12 @@
-name: Build NixOS Installer ISO
-
+# This workflow builds a NixOS installer ISO, extracts the kernel and initrd,
+# and then creates a GitHub release with the ISO, kernel, and initrd as assets.
 on:
   push:
     branches:
       - main
 
 permissions:
-  contents: write    # Allows pushing tags, commits, and managing releases
+  contents: write    # Allows creating releases and pushing tags
 
 jobs:
   build:
@@ -26,20 +26,46 @@ jobs:
           nix build .#nixosConfigurations.installer.config.system.build.isoImage
           cp ./result/iso/nixos-*.iso ./nixos-installer.iso
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      # --- NEW STEP: Extract kernel and initrd from the ISO ---
+      - name: Extract Kernel and Initrd
+        run: |
+          echo "Extracting boot files from nixos-installer.iso..."
+          # Create a temporary mount point
+          sudo mkdir -p /mnt/iso
+
+          # Mount the ISO using a loop device
+          sudo mount -o loop ./nixos-installer.iso /mnt/iso
+
+          # Copy the kernel and initrd. For NixOS, they are typically in the /boot directory.
+          # We copy them to the workspace for uploading.
+          cp /mnt/iso/boot/kernel ./nixos.vmlinuz
+          cp /mnt/iso/boot/initrd ./nixos.initrd
+
+          # Unmount the ISO
+          sudo umount /mnt/iso
+
+          echo "Kernel and initrd extracted successfully."
+          ls -lh ./nixos.vmlinuz ./nixos.initrd
+
+      - name: Install jq and GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys C99B11DEB97541F0
+          sudo apt-add-repository https://cli.github.com/packages
+          sudo apt-get update
+          sudo apt-get install -y github-cli
 
       - name: Get latest release version
         id: get_version
         run: |
-          set +e  # Disable immediate exit on error
+          set +e # Disable immediate exit on error
           echo "Fetching latest release for ${{ github.repository }}"
           RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             https://api.github.com/repos/${{ github.repository }}/releases/latest 2>&1)
           HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
           BODY=$(echo "$RESPONSE" | sed '$d')
           echo "HTTP Status: $HTTP_STATUS"
-          echo "Response Body: $BODY"
           if [ "$HTTP_STATUS" -eq 200 ]; then
             LATEST_VERSION=$(echo "$BODY" | jq -r '.tag_name' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+$' || echo "")
             if [ -n "$LATEST_VERSION" ]; then
@@ -61,41 +87,36 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
+      # --- MODIFIED STEP: Create release with ISO, kernel, and initrd ---
       - name: Create or update release and manage 'latest' tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Debug: Verify ISO file exists
-          ls -la ./nixos-installer.iso
+          # Verify all assets exist before proceeding
+          ls -la ./nixos-installer.iso ./nixos.vmlinuz ./nixos.initrd
           
-          # Force delete the 'latest' tag on remote
-          git push origin :refs/tags/latest
+          # Use a versioned tag for the new release
+          VERSION_TAG="v${{ steps.get_version.outputs.version }}"
           
-          # Create or overwrite the 'latest' tag locally
-          git tag -f latest
-          
-          # Push the new 'latest' tag
-          git push origin latest
-          
-          # Create a new versioned release
-          gh release create v${{ steps.get_version.outputs.version }} \
+          echo "Creating new release with tag ${VERSION_TAG}"
+          gh release create "${VERSION_TAG}" \
             ./nixos-installer.iso \
-            --title "NixOS Installer v${{ steps.get_version.outputs.version }}" \
-            --notes "Automated release for NixOS installer ISO"
-          
-          # Ensure the 'latest' tag is associated with the release
-          if gh release view latest --repo ${{ github.repository }} > /dev/null 2>&1; then
-            gh release edit latest \
-              --tag latest \
-              --title "Latest NixOS Installer" \
-              --notes "Points to the latest NixOS installer ISO release"
-          else
-            gh release create latest \
-              ./nixos-installer.iso \
-              --tag latest \
-              --title "Latest NixOS Installer" \
-              --notes "Points to the latest NixOS installer ISO release"
-          fi
+            ./nixos.vmlinuz \
+            ./nixos.initrd \
+            --title "NixOS Installer ${VERSION_TAG}" \
+            --notes "Automated release for NixOS installer."
+
+          echo "Updating the 'latest' release to point to this build..."
+          # Delete the old 'latest' release if it exists
+          gh release delete latest --yes || echo "No previous 'latest' release to delete."
+
+          # Create a new 'latest' release, uploading the assets again
+          gh release create latest \
+            ./nixos-installer.iso \
+            ./nixos.vmlinuz \
+            ./nixos.initrd \
+            --title "Latest NixOS Installer (points to ${VERSION_TAG})" \
+            --notes "This is the latest automated build."
 
       - name: Upload ISO as artifact (on failure)
         if: failure()
