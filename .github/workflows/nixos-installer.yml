@@ -26,35 +26,60 @@ jobs:
           nix build .#nixosConfigurations.installer.config.system.build.isoImage
           cp ./result/iso/nixos-*.iso ./nixos-installer.iso
 
-      # --- NEW STEP: Extract kernel and initrd from the ISO ---
-      - name: Extract Kernel and Initrd
+      # --- MODIFIED STEP: Extract kernel, initrd, and boot parameters dynamically ---
+      - name: Extract Boot Files and Parameters
         run: |
           echo "Extracting boot files from nixos-installer.iso..."
-          # Create a temporary mount point
           sudo mkdir -p /mnt/iso
-
-          # Mount the ISO using a loop device
           sudo mount -o loop ./nixos-installer.iso /mnt/iso
 
-          # Copy the kernel and initrd. For NixOS, they are typically in the /boot directory.
-          # We copy them to the workspace for uploading.
-          cp /mnt/iso/boot/kernel ./nixos.vmlinuz
-          cp /mnt/iso/boot/initrd ./nixos.initrd
+          # Find the kernel and initrd files dynamically instead of using a fixed path
+          KERNEL_PATH=$(find /mnt/iso -name 'kernel')
+          INITRD_PATH=$(find /mnt/iso -name 'initrd')
 
-          # Unmount the ISO
+          if [ -z "$KERNEL_PATH" ] || [ -z "$INITRD_PATH" ]; then
+            echo "Error: Could not find kernel or initrd in the ISO."
+            # List directory contents for debugging
+            find /mnt/iso
+            exit 1
+          fi
+
+          echo "Found kernel at: $KERNEL_PATH"
+          echo "Found initrd at: $INITRD_PATH"
+
+          # Copy the files to the workspace
+          cp "$KERNEL_PATH" ./nixos.vmlinuz
+          cp "$INITRD_PATH" ./nixos.initrd
+
+          # --- NEW: Extract the 'init' parameter from the GRUB config ---
+          echo "Extracting boot parameters from GRUB config..."
+          # Find the grub.cfg file
+          GRUB_CFG_PATH=$(find /mnt/iso -name 'grub.cfg')
+          if [ -z "$GRUB_CFG_PATH" ]; then
+             echo "Warning: Could not find grub.cfg to extract boot parameters."
+             # Create an empty placeholder file
+             echo "init= parameter not found" > ./boot-params.txt
+          else
+            # Extract the line with 'linux', then get the 'init=' argument
+            grep '^\s*linux' "$GRUB_CFG_PATH" | sed -n 's/.*\(init=[^ ]*\).*/\1/p' > ./boot-params.txt
+            echo "Boot parameters extracted to boot-params.txt:"
+            cat ./boot-params.txt
+          fi
+
           sudo umount /mnt/iso
-
-          echo "Kernel and initrd extracted successfully."
-          ls -lh ./nixos.vmlinuz ./nixos.initrd
+          echo "Kernel, initrd, and boot params extracted successfully."
+          ls -lh ./nixos.vmlinuz ./nixos.initrd ./boot-params.txt
 
       - name: Install jq and GitHub CLI
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
-          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys C99B11DEB97541F0
-          sudo apt-add-repository https://cli.github.com/packages
-          sudo apt-get update
-          sudo apt-get install -y github-cli
+          type -p curl >/dev/null || (sudo apt-get update && sudo apt-get install curl -y)
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && sudo apt-get update \
+          && sudo apt-get install gh -y
 
       - name: Get latest release version
         id: get_version
@@ -87,15 +112,14 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-      # --- MODIFIED STEP: Create release with ISO, kernel, and initrd ---
+      # --- MODIFIED STEP: Create release with ISO, kernel, initrd, and boot-params.txt ---
       - name: Create or update release and manage 'latest' tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Verify all assets exist before proceeding
-          ls -la ./nixos-installer.iso ./nixos.vmlinuz ./nixos.initrd
+          ls -la ./nixos-installer.iso ./nixos.vmlinuz ./nixos.initrd ./boot-params.txt
           
-          # Use a versioned tag for the new release
           VERSION_TAG="v${{ steps.get_version.outputs.version }}"
           
           echo "Creating new release with tag ${VERSION_TAG}"
@@ -103,20 +127,20 @@ jobs:
             ./nixos-installer.iso \
             ./nixos.vmlinuz \
             ./nixos.initrd \
+            ./boot-params.txt \
             --title "NixOS Installer ${VERSION_TAG}" \
-            --notes "Automated release for NixOS installer."
+            --notes "Automated release for NixOS installer. See boot-params.txt for the required 'init' kernel parameter."
 
           echo "Updating the 'latest' release to point to this build..."
-          # Delete the old 'latest' release if it exists
           gh release delete latest --yes || echo "No previous 'latest' release to delete."
 
-          # Create a new 'latest' release, uploading the assets again
           gh release create latest \
             ./nixos-installer.iso \
             ./nixos.vmlinuz \
             ./nixos.initrd \
+            ./boot-params.txt \
             --title "Latest NixOS Installer (points to ${VERSION_TAG})" \
-            --notes "This is the latest automated build."
+            --notes "This is the latest automated build. See boot-params.txt for the required 'init' kernel parameter."
 
       - name: Upload ISO as artifact (on failure)
         if: failure()
@@ -124,3 +148,4 @@ jobs:
         with:
           name: nixos-installer-iso
           path: ./nixos-installer.iso
+
