@@ -26,42 +26,44 @@ jobs:
           nix build .#nixosConfigurations.installer.config.system.build.isoImage
           cp ./result/iso/nixos-*.iso ./nixos-installer.iso
 
-      # --- MODIFIED STEP: Extract kernel, initrd, and boot parameters dynamically ---
+      # --- CORRECTED STEP: Search for 'bzImage' as the kernel name ---
       - name: Extract Boot Files and Parameters
         run: |
           echo "Extracting boot files from nixos-installer.iso..."
           sudo mkdir -p /mnt/iso
           sudo mount -o loop ./nixos-installer.iso /mnt/iso
 
-          # Find the kernel and initrd files dynamically instead of using a fixed path
-          KERNEL_PATH=$(find /mnt/iso -name 'kernel')
-          INITRD_PATH=$(find /mnt/iso -name 'initrd')
+          # Find the kernel (named bzImage in this case) and initrd files dynamically.
+          # We use '-type f' to ensure we only match files.
+          KERNEL_PATH=$(find /mnt/iso -type f -name 'bzImage')
+          INITRD_PATH=$(find /mnt/iso -type f -name 'initrd')
 
           if [ -z "$KERNEL_PATH" ] || [ -z "$INITRD_PATH" ]; then
-            echo "Error: Could not find kernel or initrd in the ISO."
+            echo "Error: Could not find kernel (bzImage) or initrd in the ISO."
             # List directory contents for debugging
+            echo "--- ISO File Listing ---"
             find /mnt/iso
+            echo "------------------------"
             exit 1
           fi
 
           echo "Found kernel at: $KERNEL_PATH"
           echo "Found initrd at: $INITRD_PATH"
 
-          # Copy the files to the workspace
+          # Copy the files to the workspace, giving the kernel a standard name
           cp "$KERNEL_PATH" ./nixos.vmlinuz
           cp "$INITRD_PATH" ./nixos.initrd
 
-          # --- NEW: Extract the 'init' parameter from the GRUB config ---
+          # Extract the 'init' parameter from the GRUB config
           echo "Extracting boot parameters from GRUB config..."
-          # Find the grub.cfg file
-          GRUB_CFG_PATH=$(find /mnt/iso -name 'grub.cfg')
+          # Find the grub.cfg file(s)
+          GRUB_CFG_PATH=$(find /mnt/iso -type f -name 'grub.cfg')
           if [ -z "$GRUB_CFG_PATH" ]; then
              echo "Warning: Could not find grub.cfg to extract boot parameters."
-             # Create an empty placeholder file
              echo "init= parameter not found" > ./boot-params.txt
           else
-            # Extract the line with 'linux', then get the 'init=' argument
-            grep '^\s*linux' "$GRUB_CFG_PATH" | sed -n 's/.*\(init=[^ ]*\).*/\1/p' > ./boot-params.txt
+            # Search all found grub.cfg files and extract the first 'init=' parameter found
+            grep -m 1 '^\s*linux' $GRUB_CFG_PATH | sed -n 's/.*\(init=[^ ]*\).*/\1/p' > ./boot-params.txt
             echo "Boot parameters extracted to boot-params.txt:"
             cat ./boot-params.txt
           fi
