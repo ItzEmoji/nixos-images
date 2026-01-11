@@ -7,7 +7,7 @@
   # Basic system configuration
   environment.systemPackages = with pkgs; [
     git
-    cfdisk
+    util-linux
     curl
     wget
     neovim
