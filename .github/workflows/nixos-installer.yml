@@ -1,0 +1,96 @@
+name: Build NixOS-Installers
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write   # GHCR
+  id-token: write
+
+jobs:
+  build-all:
+    runs-on: ubuntu-latest
+    environment: env
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # Install Nix
+      # -------------------------
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            sandbox = false
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+
+      # -------------------------
+      #  Setup Cachix
+      # -------------------------
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v14
+        with:
+          name: nixos-images
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      # =========================
+      # 1️⃣ NETBOOT
+      # =========================
+      - name: Build Netboot
+        run: |
+          set -euxo pipefail
+          nix build .#packages.x86_64-linux.netboot -o netboot-result
+          mkdir -p netboot-artifacts
+          cp -L -r netboot-result/* netboot-artifacts/
+
+      - name: Upload Netboot Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netboot
+          path: netboot-artifacts/
+
+      # =========================
+      # 2️⃣ ISO
+      # =========================
+      - name: Build Installer ISO
+        run: |
+          set -euxo pipefail
+          nix build .#iso -o iso-result
+          sudo cp -L iso-result/iso/*.iso nixos-installer.iso
+
+      - name: Upload ISO Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso
+          path: nixos-installer.iso
+      # =========================
+      # 4️⃣ RELEASE (optional, aber geil)
+      # =========================
+      - name: Generate Tag
+        id: tag
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body: |
+            NixOS build outputs:
+            - Installer ISO
+            - Netboot artifacts
+          files: |
+            nixos-installer.iso
+            netboot-artifacts/*
+          latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
