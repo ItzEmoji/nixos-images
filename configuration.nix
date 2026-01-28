@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, inputs, ... }:
 
 {
   # Enable Flakes
@@ -23,6 +23,7 @@
   # Basic system configuration
   environment.systemPackages = with pkgs; [
     git
+    inputs.nvim.packages.${pkgs.system}.default
     util-linux
     curl
     wget
