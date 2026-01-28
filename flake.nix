@@ -7,15 +7,17 @@
         url = "github:nix-community/nixos-generators";
         inputs.nixpkgs.follows = "nixpkgs";
       };
+      nvim.url = "github:ItzEmoji/nvim";
     };
 
-    outputs = { self, nixpkgs, nixos-generators, ... }:
+    outputs = { self, nixpkgs, nixos-generators, ... }@inputs:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
     in
     {
       iso = nixos-generators.nixosGenerate {
+        specialArgs = { inherit inputs; };
         inherit system;
         format = "install-iso";
         modules = [ ./configuration.nix ];
@@ -43,6 +45,7 @@
         ];
 
       nixosConfigurations.netboot = nixpkgs.lib.nixosSystem {
+        specialArgs = { inherit inputs; };
         inherit system;
         modules = [
           "${nixpkgs}/nixos/modules/installer/netboot/netboot-minimal.nix"
