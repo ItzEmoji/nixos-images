@@ -7,13 +7,18 @@ on:
 
 permissions:
   contents: write
-  packages: write   # GHCR
+  packages: write
   id-token: write
 
 jobs:
   build-all:
     runs-on: ubuntu-latest
-    environment: env
+    environment: cache
+
+    env:
+      ATTIC_SERVER: ${{ secrets.ATTIC_SERVER }}
+      ATTIC_CACHE:  ${{ secrets.ATTIC_CACHE }}
+      ATTIC_TOKEN:  ${{ secrets.ATTIC_TOKEN }}
 
     steps:
       - name: Checkout
@@ -31,13 +36,16 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
       # -------------------------
-      #  Setup Cachix
+      # Install & Configure Attic
       # -------------------------
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v14
-        with:
-          name: nixos-images
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Install Attic
+        run: |
+          nix profile install nixpkgs#attic-client
+
+      - name: Configure Attic
+        run: |
+          attic login --token "$ATTIC_TOKEN" "$ATTIC_SERVER"
+          attic use "$ATTIC_CACHE"
 
       # =========================
       # 1️⃣ NETBOOT
@@ -46,8 +54,12 @@ jobs:
         run: |
           set -euxo pipefail
           nix build .#packages.x86_64-linux.netboot -o netboot-result
+
           mkdir -p netboot-artifacts
           cp -L -r netboot-result/* netboot-artifacts/
+
+          # 🧊 JUST PUSH IT
+          attic push "$ATTIC_CACHE" ./netboot-result
 
       - name: Upload Netboot Artifact
         uses: actions/upload-artifact@v4
@@ -64,13 +76,17 @@ jobs:
           nix build .#iso -o iso-result
           sudo cp -L iso-result/iso/*.iso nixos-installer.iso
 
+          # 🧊 JUST PUSH IT
+          attic push "$ATTIC_CACHE" ./iso-result
+
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
           name: iso
           path: nixos-installer.iso
+
       # =========================
-      # 4️⃣ RELEASE (optional, aber geil)
+      # RELEASE
       # =========================
       - name: Generate Tag
         id: tag
@@ -87,6 +103,7 @@ jobs:
             NixOS build outputs:
             - Installer ISO
             - Netboot artifacts
+            Cached the caveman way 🧊🪨
           files: |
             nixos-installer.iso
             netboot-artifacts/*
