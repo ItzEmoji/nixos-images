@@ -7,18 +7,12 @@ on:
 
 permissions:
   contents: write
-  packages: write
+  packages: write   # GHCR
   id-token: write
 
 jobs:
   build-all:
     runs-on: ubuntu-latest
-    environment: cache
-
-    env:
-      ATTIC_SERVER: ${{ secrets.ATTIC_SERVER }}
-      ATTIC_CACHE:  ${{ secrets.ATTIC_CACHE }}
-      ATTIC_TOKEN:  ${{ secrets.ATTIC_TOKEN }}
 
     steps:
       - name: Checkout
@@ -35,31 +29,15 @@ jobs:
             sandbox = false
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
-      # -------------------------
-      # Install & Configure Attic
-      # -------------------------
-      - name: Install Attic
-        run: |
-          nix profile install nixpkgs#attic-client
-
-      - name: Configure Attic
-        run: |
-          attic login local "$ATTIC_SERVER" "$ATTIC_TOKEN"
-          attic use "$ATTIC_CACHE"
-
       # =========================
       # 1️⃣ NETBOOT
       # =========================
       - name: Build Netboot
         run: |
           set -euxo pipefail
-          nix build .#packages.x86_64-linux.netboot -o netboot-result
-
+          nix build .#netboot -o netboot-result
           mkdir -p netboot-artifacts
           cp -L -r netboot-result/* netboot-artifacts/
-
-          # 🧊 JUST PUSH IT
-          attic push "$ATTIC_CACHE" ./netboot-result
 
       - name: Upload Netboot Artifact
         uses: actions/upload-artifact@v4
@@ -76,17 +54,13 @@ jobs:
           nix build .#iso -o iso-result
           sudo cp -L iso-result/iso/*.iso nixos-installer.iso
 
-          # 🧊 JUST PUSH IT
-          attic push "$ATTIC_CACHE" ./iso-result
-
       - name: Upload ISO Artifact
         uses: actions/upload-artifact@v4
         with:
           name: iso
           path: nixos-installer.iso
-
       # =========================
-      # RELEASE
+      # 4️⃣ RELEASE 
       # =========================
       - name: Generate Tag
         id: tag
@@ -103,7 +77,6 @@ jobs:
             NixOS build outputs:
             - Installer ISO
             - Netboot artifacts
-            Cached the caveman way 🧊🪨
           files: |
             nixos-installer.iso
             netboot-artifacts/*

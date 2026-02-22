@@ -1,69 +1,12 @@
-  {
-    description = "NixOS Netboot (iPXE) + optional Installer ISO";
-    nixConfig = {
-      substituters = [
-        "https://cache.itzemoji.com/nix"
-        "https://cache.nixos.org"
-      ];
+{
+  description = "NixOS Netboot (iPXE) + optional Installer ISO";
 
-      trusted-public-keys = [
-        "cache.itzemoji.com/nix:xiCpklCqm9MDpLJIWSlL5YsKM0nULH7J389tvbX4UzE="
-        "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-      ];
-    };
-
-
-    inputs = {
-      nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-      nixos-generators = {
-        url = "github:nix-community/nixos-generators";
-        inputs.nixpkgs.follows = "nixpkgs";
-      };
-      nvim.url = "github:ItzEmoji/nvim";
-    };
-
-    outputs = { self, nixpkgs, nixos-generators, ... }@inputs:
-    let
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-    in
-    {
-      iso = nixos-generators.nixosGenerate {
-        specialArgs = { inherit inputs; };
-        inherit system;
-        format = "install-iso";
-        modules = [ ./configuration.nix ];
-      };
-
-      packages.${system}.netboot =
-        let
-          build = self.nixosConfigurations.netboot.config.system.build;
-          kernelFile =
-            self.nixosConfigurations.netboot.config.system.boot.loader.kernelFile;
-        in
-        pkgs.linkFarm "netboot-images" [
-          {
-            name = "bzImage";
-            path = "${build.kernel}/${kernelFile}";
-          }
-          {
-            name = "initrd";
-            path = "${build.netbootRamdisk}/initrd";
-          }
-          {
-            name = "netboot.ipxe";
-            path = "${build.netbootIpxeScript}/netboot.ipxe";
-          }
-        ];
-
-      nixosConfigurations.netboot = nixpkgs.lib.nixosSystem {
-        specialArgs = { inherit inputs; };
-        inherit system;
-        modules = [
-          "${nixpkgs}/nixos/modules/installer/netboot/netboot-minimal.nix"
-          ./configuration.nix
-        ];
-      };
-    };
-  }
-
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nvim.url = "github:ItzEmoji/nvim";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    import-tree.url = "github:vic/import-tree";
+    treefmt-nix.url = "github:numtide/treefmt-nix";
+  };
+  outputs = inputs: inputs.flake-parts.lib.mkFlake { inherit inputs; } (inputs.import-tree ./modules);
+}
