@@ -36,7 +36,7 @@ jobs:
       - name: Build Installer ISO
         run: |
           set -euxo pipefail
-          nix build .#iso -o iso-result
+          nix build .#iso-installer -o iso-result
           sudo cp -L iso-result/iso/*.iso nixos-installer.iso
 
       - name: Upload ISO Artifact
