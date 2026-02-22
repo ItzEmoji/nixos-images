@@ -29,6 +29,15 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             keep-outputs = true
             keep-derivations = true
+      # =========================
+      # 1️⃣NETBOOT
+      # =========================
+      - name: Build Netboot
+        run: |
+          set -euxo pipefail
+          nix build .#netboot -o netboot-result
+          mkdir -p netboot-artifacts
+          cp -L -r netboot-result/* netboot-artifacts/
 
       # =========================
       # ISO
@@ -39,11 +48,6 @@ jobs:
           nix build .#iso-installer -o iso-result
           sudo cp -L iso-result/iso/*.iso nixos-installer.iso
 
-      - name: Upload ISO Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: iso
-          path: nixos-installer.iso
       # =========================
       # RELEASE 
       # =========================
@@ -64,6 +68,7 @@ jobs:
             - Netboot artifacts
           files: |
             nixos-installer.iso
+            netboot-artifacts/*
           latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
