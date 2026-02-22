@@ -29,23 +29,7 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
       # =========================
-      # 1️⃣ NETBOOT
-      # =========================
-      - name: Build Netboot
-        run: |
-          set -euxo pipefail
-          nix build .#netboot -o netboot-result
-          mkdir -p netboot-artifacts
-          cp -L -r netboot-result/* netboot-artifacts/
-
-      - name: Upload Netboot Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: netboot
-          path: netboot-artifacts/
-
-      # =========================
-      # 2️⃣ ISO
+      # ISO
       # =========================
       - name: Build Installer ISO
         run: |
@@ -59,7 +43,7 @@ jobs:
           name: iso
           path: nixos-installer.iso
       # =========================
-      # 4️⃣ RELEASE 
+      # RELEASE 
       # =========================
       - name: Generate Tag
         id: tag
@@ -78,7 +62,6 @@ jobs:
             - Netboot artifacts
           files: |
             nixos-installer.iso
-            netboot-artifacts/*
           latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
