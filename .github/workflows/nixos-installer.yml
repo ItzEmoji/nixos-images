@@ -49,7 +49,7 @@ jobs:
           sudo cp -L iso-result/iso/*.iso nixos-installer.iso
 
       # =========================
-      # RELEASE 
+      # Create tag
       # =========================
       - name: Generate Tag
         id: tag
@@ -57,6 +57,27 @@ jobs:
           TAG="v1.0.${{ github.run_number }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
+      # =========================
+      # Patch netboot.ipxe
+      # =========================
+      - name: Fix netboot.ipxe for release assets
+        run: |
+          set -euxo pipefail
+
+          BASE="https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}"
+
+          FILE="netboot-artifacts/netboot.ipxe"
+
+          # Insert imgfree if not already present
+          grep -q '^imgfree' "$FILE" || sed -i '2i imgfree' "$FILE"
+
+          # Replace only the file paths, keep params untouched
+          sed -i -E "s|^kernel[[:space:]]+.*bzImage|kernel $BASE/bzImage|" "$FILE"
+          sed -i -E "s|^initrd[[:space:]]+.*initrd|initrd $BASE/initrd|" "$FILE"
+
+      # =========================
+      # Create release
+      # =========================
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -68,7 +89,9 @@ jobs:
             - Netboot artifacts
           files: |
             nixos-installer.iso
-            netboot-artifacts/*
+            netboot-artifacts/netboot.ipxe
+            netboot-artifacts/initrd
+            netboot-artifacts/bzImage
           latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
