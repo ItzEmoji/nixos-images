@@ -12,6 +12,8 @@
         libeatmydata
         debootstrap
         arch-install-scripts
+        inputs.nixos-dotfiles.packages.${pkgs.system}.tmux
+        inputs.nixos-dotfiles.packages.${pkgs.system}.bat
       ];
     };
 }
