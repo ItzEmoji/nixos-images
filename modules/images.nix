@@ -5,7 +5,7 @@
   ];
   perSystem =
     { system, pkgs, ... }:
-    let 
+    let
       build = self.nixosConfigurations.nixos-installer.config.system.build;
     in
     {
@@ -35,15 +35,15 @@
         iso-installer = build.images.iso-installer;
         sd-card = build.images.sd-card;
         kexec = build.images.kexec;
-        
+
         netboot = pkgs.symlinkJoin {
-            name = "netboot";
-            paths = [
-              build.images.kexec.passthru.config.system.build.netbootRamdisk
-              build.images.kexec.passthru.config.system.build.kernel
-              build.images.kexec.passthru.config.system.build.netbootIpxeScript
-            ];
-          };
+          name = "netboot";
+          paths = [
+            build.images.kexec.passthru.config.system.build.netbootRamdisk
+            build.images.kexec.passthru.config.system.build.kernel
+            build.images.kexec.passthru.config.system.build.netbootIpxeScript
+          ];
         };
+      };
     };
 }
