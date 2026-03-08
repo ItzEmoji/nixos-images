@@ -9,6 +9,9 @@
         curl
         wget
         fastfetch
+        libeatmydata
+        debootstrap
+        arch-install-scripts
       ];
     };
 }
