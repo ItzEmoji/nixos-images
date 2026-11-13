@@ -6,7 +6,7 @@
       console = {
         earlySetup = true;
         font = "ter-v24n";
-        packages = [ pkgs.termius_font ];
+        packages = [ pkgs.terminus_font ];
       };
       services.getty.autologinUser = "root";
     };
