@@ -11,6 +11,7 @@
       self.nixosModules.packages
       self.nixosModules.nix-config
       self.nixosModules.root-user
+      self.nixosModules.console
       {
         nixpkgs.hostPlatform = "x86_64-linux";
         networking.hostName = "nixos-installer";
