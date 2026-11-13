@@ -6,7 +6,6 @@
     modules = [
       "${inputs.nixpkgs}/nixos/modules/image/images.nix"
       inputs.nvim.nixosModules.nvim
-      self.nixosModules.kmscon
       self.nixosModules.ssh-server
       self.nixosModules.xkb
       self.nixosModules.packages
